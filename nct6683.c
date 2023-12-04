@@ -177,6 +177,7 @@ superio_exit(int ioreg)
 #define NCT6683_CUSTOMER_ID_ASROCK		0xe2c
 #define NCT6683_CUSTOMER_ID_ASROCK2	0xe1b
 #define NCT6683_CUSTOMER_ID_ASROCK3	0x1631
+#define NCT6683_CUSTOMER_ID_ASROCK4	0x1633
 
 #define NCT6683_REG_BUILD_YEAR		0x604
 #define NCT6683_REG_BUILD_MONTH		0x605
@@ -1230,9 +1231,13 @@ static int nct6683_probe(struct platform_device *pdev)
 		break;
 	case NCT6683_CUSTOMER_ID_ASROCK3:
 		break;
+	case NCT6683_CUSTOMER_ID_ASROCK4:
+		break;
 	default:
-		if (!force)
+		if (!force) {
+			dev_err(dev, "Unknown customer ID 0x%x\n", data->customer_id);
 			return -ENODEV;
+		}
 	}
 
 	nct6683_init_device(data);
