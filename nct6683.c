@@ -954,8 +954,9 @@ static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 	if (!(data->have_pwm & (1 << pwm)))
 		return 0;
 
-	/* Only update pwm values for Mitac boards */
-	if (data->customer_id == NCT6683_CUSTOMER_ID_MITAC)
+	/* Only update pwm values for known boards */
+	if ((data->customer_id == NCT6683_CUSTOMER_ID_MITAC) ||
+	    (data->customer_id == NCT6683_CUSTOMER_ID_ASROCK4))
 		return attr->mode | S_IWUSR;
 
 	return attr->mode;
