@@ -165,6 +165,7 @@ superio_exit(int ioreg)
 
 #define NCT6683_REG_FAN_MIN(x)		(0x3b8 + (x) * 2)	/* 16 bit */
 
+#define NCT6683_REG_FAN_MODE_CTRL	0xa00
 #define NCT6683_REG_FAN_CFG_CTRL	0xa01
 #define NCT6683_FAN_CFG_REQ		0x80
 #define NCT6683_FAN_CFG_DONE		0x40
@@ -337,6 +338,7 @@ struct nct6683_data {
 
 	u8 have_pwm;
 	u8 pwm[NCT6683_NUM_REG_PWM];
+	u8 pwm_mode[NCT6683_NUM_REG_PWM];
 
 #ifdef CONFIG_PM
 	/* Remember extra register values over suspend/resume */
@@ -585,12 +587,14 @@ static int get_temp_reg(struct nct6683_data *data, int nr, int index)
 static void nct6683_update_pwm(struct device *dev)
 {
 	struct nct6683_data *data = dev_get_drvdata(dev);
+	u16 pwm_modes = nct6683_read(data, NCT6683_REG_FAN_MODE_CTRL);
 	int i;
 
 	for (i = 0; i < NCT6683_NUM_REG_PWM; i++) {
 		if (!(data->have_pwm & (1 << i)))
 			continue;
 		data->pwm[i] = nct6683_read(data, NCT6683_REG_PWM(i));
+		data->pwm_mode[i] = (pwm_modes >> i) & 1;
 	}
 }
 
@@ -911,6 +915,37 @@ static const struct sensor_template_group nct6683_temp_template_group = {
 };
 
 static ssize_t
+show_pwm_mode(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct nct6683_data *data = nct6683_update_device(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	int index = sattr->index;
+
+	return sprintf(buf, "%d\n", data->pwm_mode[index]);
+}
+
+static ssize_t
+store_pwm_mode(struct device *dev, struct device_attribute *attr,
+	       const char *buf, size_t count)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	struct nct6683_data *data = dev_get_drvdata(dev);
+	int index = sattr->index;
+	u16 val, bitmap;
+
+	if (kstrtou16(buf, 10, &val) || val > 1)
+		return -EINVAL;
+
+	mutex_lock(&data->update_lock);
+	bitmap = nct6683_read(data, NCT6683_REG_FAN_MODE_CTRL);
+	bitmap = (bitmap & ~(1 << index)) | (val << index);
+	nct6683_write(data, NCT6683_REG_FAN_MODE_CTRL, bitmap);
+	mutex_unlock(&data->update_lock);
+
+	return count;
+}
+
+static ssize_t
 show_pwm(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct nct6683_data *data = nct6683_update_device(dev);
@@ -943,15 +978,21 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 }
 
 SENSOR_TEMPLATE(pwm, "pwm%d", S_IRUGO, show_pwm, store_pwm, 0);
+SENSOR_TEMPLATE(pwm_mode, "pwm%d_mode", S_IRUGO, show_pwm_mode, store_pwm_mode, 0);
 
 static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 				      struct attribute *attr, int index)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct nct6683_data *data = dev_get_drvdata(dev);
-	int pwm = index;	/* pwm index */
+	int pwm = index / 2;	/* pwm index */
+	int nr = index % 2;	/* attribute index */
 
 	if (!(data->have_pwm & (1 << pwm)))
+		return 0;
+
+	/* Extra pwm controls are only tested on ASRock B650E PG-ITX */
+	if (nr > 0 && data->customer_id != NCT6683_CUSTOMER_ID_ASROCK4)
 		return 0;
 
 	/* Only update pwm values for known boards */
@@ -964,6 +1005,7 @@ static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 
 static struct sensor_device_template *nct6683_attributes_pwm_template[] = {
 	&sensor_dev_template_pwm,
+	&sensor_dev_template_pwm_mode,
 	NULL
 };
 
