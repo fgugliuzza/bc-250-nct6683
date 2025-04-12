@@ -179,6 +179,7 @@ superio_exit(int ioreg)
 #define NCT6683_CUSTOMER_ID_ASROCK2	0xe1b
 #define NCT6683_CUSTOMER_ID_ASROCK3	0x1631
 #define NCT6683_CUSTOMER_ID_ASROCK4	0x1633
+#define NCT6683_CUSTOMER_ID_ASROCK5	0x162b
 
 #define NCT6683_REG_BUILD_YEAR		0x604
 #define NCT6683_REG_BUILD_MONTH		0x605
@@ -991,13 +992,19 @@ static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 	if (!(data->have_pwm & (1 << pwm)))
 		return 0;
 
-	/* Extra pwm controls are only tested on ASRock B650E PG-ITX */
-	if (nr > 0 && data->customer_id != NCT6683_CUSTOMER_ID_ASROCK4)
+	/*
+	 * Extra pwm controls are only tested on ASRock B650E PG-ITX
+	 * and ASRock/AMD BC-250
+	 */
+	if (nr > 0 &&
+	    (data->customer_id != NCT6683_CUSTOMER_ID_ASROCK4) &&
+	    (data->customer_id != NCT6683_CUSTOMER_ID_ASROCK5))
 		return 0;
 
 	/* Only update pwm values for known boards */
 	if ((data->customer_id == NCT6683_CUSTOMER_ID_MITAC) ||
-	    (data->customer_id == NCT6683_CUSTOMER_ID_ASROCK4))
+	    (data->customer_id == NCT6683_CUSTOMER_ID_ASROCK4) ||
+	    (data->customer_id == NCT6683_CUSTOMER_ID_ASROCK5))
 		return attr->mode | S_IWUSR;
 
 	return attr->mode;
@@ -1275,6 +1282,8 @@ static int nct6683_probe(struct platform_device *pdev)
 	case NCT6683_CUSTOMER_ID_ASROCK3:
 		break;
 	case NCT6683_CUSTOMER_ID_ASROCK4:
+		break;
+	case NCT6683_CUSTOMER_ID_ASROCK5:
 		break;
 	default:
 		if (!force) {
